@@ -60,9 +60,6 @@ const (
 	appSourceFile                  = ".argocd-source-%s.yaml"
 )
 
-// List of protocol schemes allowed for fetching remote value files
-var allowedHelmRemoteProtocols = []string{"http", "https"}
-
 // Service implements ManifestService interface
 type Service struct {
 	repoLock                  *repositoryLock
@@ -666,7 +663,11 @@ func helmTemplate(appPath string, repoRoot string, env *v1alpha1.Env, q *apiclie
 		for _, val := range appHelm.ValueFiles {
 
 			// This will resolve val to an absolute path (or an URL)
-			path, _, err := resolveHelmValueFilePath(appPath, repoRoot, val, allowedHelmRemoteProtocols)
+			var protocols []string
+			if q.HelmOptions != nil {
+				protocols = q.HelmOptions.ValuesFileSchemes
+			}
+			path, _, err := resolveHelmValueFilePath(appPath, repoRoot, val, protocols)
 			if err != nil {
 				return nil, err
 			}
