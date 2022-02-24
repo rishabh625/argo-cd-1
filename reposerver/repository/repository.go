@@ -24,6 +24,7 @@ import (
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/ghodss/yaml"
 	"github.com/google/go-jsonnet"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc/codes"
@@ -46,6 +47,7 @@ import (
 	"github.com/argoproj/argo-cd/v2/util/gpg"
 	"github.com/argoproj/argo-cd/v2/util/helm"
 	"github.com/argoproj/argo-cd/v2/util/io"
+	pathutil "github.com/argoproj/argo-cd/v2/util/io/path"
 	"github.com/argoproj/argo-cd/v2/util/ksonnet"
 	argokube "github.com/argoproj/argo-cd/v2/util/kube"
 	"github.com/argoproj/argo-cd/v2/util/kustomize"
@@ -647,7 +649,7 @@ func helmTemplate(appPath string, repoRoot string, env *v1alpha1.Env, q *apiclie
 		APIVersions: q.ApiVersions,
 		Set:         map[string]string{},
 		SetString:   map[string]string{},
-		SetFile:     map[string]string{},
+		SetFile:     map[string]pathutil.ResolvedFilePath{},
 	}
 
 	appHelm := q.ApplicationSource.Helm
@@ -663,11 +665,7 @@ func helmTemplate(appPath string, repoRoot string, env *v1alpha1.Env, q *apiclie
 		for _, val := range appHelm.ValueFiles {
 
 			// This will resolve val to an absolute path (or an URL)
-			var protocols []string
-			if q.HelmOptions != nil {
-				protocols = q.HelmOptions.ValuesFileSchemes
-			}
-			path, _, err := resolveHelmValueFilePath(appPath, repoRoot, val, protocols)
+			path, _, err := pathutil.ResolveFilePath(appPath, repoRoot, val, q.GetValuesFileSchemes())
 			if err != nil {
 				return nil, err
 			}
@@ -676,17 +674,17 @@ func helmTemplate(appPath string, repoRoot string, env *v1alpha1.Env, q *apiclie
 		}
 
 		if appHelm.Values != "" {
-			file, err := ioutil.TempFile("", "values-*.yaml")
+			rand, err := uuid.NewRandom()
 			if err != nil {
 				return nil, err
 			}
-			p := file.Name()
+			p := path.Join(os.TempDir(), rand.String())
 			defer func() { _ = os.RemoveAll(p) }()
 			err = ioutil.WriteFile(p, []byte(appHelm.Values), 0644)
 			if err != nil {
 				return nil, err
 			}
-			templateOpts.Values = append(templateOpts.Values, p)
+			templateOpts.Values = append(templateOpts.Values, pathutil.ResolvedFilePath(p))
 		}
 
 		for _, p := range appHelm.Parameters {
@@ -697,7 +695,11 @@ func helmTemplate(appPath string, repoRoot string, env *v1alpha1.Env, q *apiclie
 			}
 		}
 		for _, p := range appHelm.FileParameters {
-			templateOpts.SetFile[p.Name] = p.Path
+			resolvedPath, _, err := pathutil.ResolveFilePath(appPath, repoRoot, env.Envsubst(p.Path), q.GetValuesFileSchemes())
+			if err != nil {
+				return nil, err
+			}
+			templateOpts.SetFile[p.Name] = resolvedPath
 		}
 	}
 	if templateOpts.Name == "" {
@@ -1100,11 +1102,11 @@ func makeJsonnetVm(appPath string, repoRoot string, sourceJsonnet v1alpha1.Appli
 	// Jsonnet Imports relative to the repository path
 	jpaths := []string{appPath}
 	for _, p := range sourceJsonnet.Libs {
-		jpath := path.Join(repoRoot, p)
-		if !strings.HasPrefix(jpath, repoRoot) {
-			return nil, status.Errorf(codes.FailedPrecondition, "%s: referenced library points outside the repository", p)
+		jpath, _, err := pathutil.ResolveFilePath(appPath, repoRoot, p, nil)
+		if err != nil {
+			return nil, err
 		}
-		jpaths = append(jpaths, jpath)
+		jpaths = append(jpaths, string(jpath))
 	}
 
 	vm.Importer(&jsonnet.FileImporter{
@@ -1170,6 +1172,39 @@ func runConfigManagementPlugin(appPath string, envVars *v1alpha1.Env, q *apiclie
 }
 
 func (s *Service) GetAppDetails(ctx context.Context, q *apiclient.RepoServerAppDetailsQuery) (*apiclient.RepoAppDetailsResponse, error) {
+	res := &apiclient.RepoAppDetailsResponse{}
+
+	cacheFn := s.createGetAppDetailsCacheHandler(res, q)
+	operation := func(repoRoot, commitSHA, revision string, ctxSrc operationContextSrc) error {
+		ctx, err := ctxSrc()
+		if err != nil {
+			return err
+		}
+
+		appSourceType, err := GetAppSourceType(q.Source, ctx.appPath, q.AppName)
+		if err != nil {
+			return err
+		}
+
+		res.Type = string(appSourceType)
+
+		switch appSourceType {
+		case v1alpha1.ApplicationSourceTypeKsonnet:
+			if err := populateKsonnetAppDetails(res, ctx.appPath, q); err != nil {
+				return err
+			}
+		case v1alpha1.ApplicationSourceTypeHelm:
+			if err := populateHelmAppDetails(res, ctx.appPath, repoRoot, q); err != nil {
+				return err
+			}
+		case v1alpha1.ApplicationSourceTypeKustomize:
+			if err := populateKustomizeAppDetails(res, q, ctx.appPath); err != nil {
+				return err
+			}
+		}
+		_ = s.cache.SetAppDetails(revision, q.Source, res)
+		return nil
+	}
 
 	getCached := func(revision string, _ bool) (bool, interface{}, error) {
 		res := &apiclient.RepoAppDetailsResponse{}
@@ -1184,7 +1219,39 @@ func (s *Service) GetAppDetails(ctx context.Context, q *apiclient.RepoServerAppD
 		} else {
 			log.Infof("app details cache miss: %s/%s", revision, q.Source)
 		}
-		return false, nil, nil
+		return false, nil
+	}
+}
+
+func populateKsonnetAppDetails(res *apiclient.RepoAppDetailsResponse, appPath string, q *apiclient.RepoServerAppDetailsQuery) error {
+	var ksonnetAppSpec apiclient.KsonnetAppSpec
+	data, err := ioutil.ReadFile(filepath.Join(appPath, "app.yaml"))
+	if err != nil {
+		return err
+	}
+	err = yaml.Unmarshal(data, &ksonnetAppSpec)
+	if err != nil {
+		return err
+	}
+	ksApp, err := ksonnet.NewKsonnetApp(appPath)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "unable to load application from %s: %v", appPath, err)
+	}
+	env := ""
+	if q.Source.Ksonnet != nil {
+		env = q.Source.Ksonnet.Environment
+	}
+	params, err := ksApp.ListParams(env)
+	if err != nil {
+		return err
+	}
+	ksonnetAppSpec.Parameters = params
+	res.Ksonnet = &ksonnetAppSpec
+	return nil
+}
+
+func populateHelmAppDetails(res *apiclient.RepoAppDetailsResponse, appPath string, repoRoot string, q *apiclient.RepoServerAppDetailsQuery) error {
+	var selectedValueFiles []string
 
 	}
 
@@ -1194,6 +1261,50 @@ func (s *Service) GetAppDetails(ctx context.Context, q *apiclient.RepoServerAppD
 			return nil, err
 		}
 		appPath := ctx.appPath
+	}
+	h, err := helm.NewHelmApp(appPath, getHelmRepos(q.Repos), false, version, q.Repo.Proxy)
+	if err != nil {
+		return err
+	}
+	defer h.Dispose()
+	err = h.Init()
+	if err != nil {
+		return err
+	}
+
+	if err := loadFileIntoIfExists(filepath.Join(appPath, "values.yaml"), &res.Helm.Values); err != nil {
+		return err
+	}
+	var resolvedSelectedValueFiles []pathutil.ResolvedFilePath
+	// drop not allowed values files
+	for _, file := range selectedValueFiles {
+		if resolvedFile, _, err := pathutil.ResolveFilePath(appPath, repoRoot, file, q.GetValuesFileSchemes()); err == nil {
+			resolvedSelectedValueFiles = append(resolvedSelectedValueFiles, resolvedFile)
+		} else {
+			log.Debugf("Values file %s is not allowed: %v", file, err)
+		}
+	}
+	params, err := h.GetParameters(resolvedSelectedValueFiles)
+	if err != nil {
+		return err
+	}
+	for k, v := range params {
+		res.Helm.Parameters = append(res.Helm.Parameters, &v1alpha1.HelmParameter{
+			Name:  k,
+			Value: v,
+		})
+	}
+	for _, v := range fileParameters(q) {
+		res.Helm.FileParameters = append(res.Helm.FileParameters, &v1alpha1.HelmFileParameter{
+			Name: v.Name,
+			Path: v.Path, //filepath.Join(appPath, v.Path),
+		})
+	}
+	return nil
+}
+
+func loadFileIntoIfExists(path string, destination *string) error {
+	info, err := os.Stat(path)
 
 		res := &apiclient.RepoAppDetailsResponse{}
 		appSourceType, err := GetAppSourceType(q.Source, appPath, q.AppName)

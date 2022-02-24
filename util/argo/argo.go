@@ -265,6 +265,9 @@ func ValidateRepo(
 		Source:           &spec.Source,
 		Repos:            helmRepos,
 		KustomizeOptions: kustomizeOptions,
+		// don't use case during application change to make sure to fetch latest git/helm revisions
+		NoRevisionCache: true,
+		HelmOptions:     helmOptions,
 	})
 	if err != nil {
 		conditions = append(conditions, argoappv1.ApplicationCondition{
@@ -304,8 +307,7 @@ func ValidateRepo(
 		plugins,
 		cluster.ServerVersion,
 		APIGroupsToVersions(apiGroups),
-		permittedHelmCredentials,
-		settingsMgr)...)
+		permittedHelmCredentials)...)
 
 	return conditions, nil
 }
@@ -419,7 +421,7 @@ func GetAppProject(spec *argoappv1.ApplicationSpec, projLister applicationsv1.Ap
 }
 
 // verifyGenerateManifests verifies a repo path can generate manifests
-func verifyGenerateManifests(ctx context.Context, repoRes *argoappv1.Repository, helmRepos argoappv1.Repositories, helmOptions *argoappv1.HelmOptions, app *argoappv1.Application, repoClient apiclient.RepoServerServiceClient, kustomizeOptions *argoappv1.KustomizeOptions, plugins []*argoappv1.ConfigManagementPlugin, kubeVersion string, apiVersions []string, repositoryCredentials []*argoappv1.RepoCreds, settingsMgr *settings.SettingsManager) []argoappv1.ApplicationCondition {
+func verifyGenerateManifests(ctx context.Context, repoRes *argoappv1.Repository, helmRepos argoappv1.Repositories, helmOptions *argoappv1.HelmOptions, app *argoappv1.Application, repoClient apiclient.RepoServerServiceClient, kustomizeOptions *argoappv1.KustomizeOptions, plugins []*argoappv1.ConfigManagementPlugin, kubeVersion string, apiVersions []string, repositoryCredentials []*argoappv1.RepoCreds) []argoappv1.ApplicationCondition {
 	spec := &app.Spec
 	var conditions []argoappv1.ApplicationCondition
 	if spec.Destination.Server == "" {
