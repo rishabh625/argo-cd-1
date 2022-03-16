@@ -2,9 +2,9 @@ FROM redis:6.2.4 as redis
 
 FROM node:12.18.4 as node
 
-FROM golang:1.16.4 as golang
+FROM golang:1.17.6 as golang
 
-FROM ubuntu:20.10
+FROM ubuntu:21.10
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN  apt-get update && apt-get install -y \
