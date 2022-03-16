@@ -1517,6 +1517,10 @@ type RepoCreds struct {
 	GithubAppInstallationId int64 `json:"githubAppInstallationID,omitempty" protobuf:"bytes,9,opt,name=githubAppInstallationID"`
 	// GithubAppEnterpriseBaseURL specifies the GitHub API URL for GitHub app authentication. If empty will default to https://api.github.com
 	GitHubAppEnterpriseBaseURL string `json:"githubAppEnterpriseBaseUrl,omitempty" protobuf:"bytes,10,opt,name=githubAppEnterpriseBaseUrl"`
+	// EnableOCI specifies whether helm-oci support should be enabled for this repo
+	EnableOCI bool `json:"enableOCI,omitempty" protobuf:"bytes,11,opt,name=enableOCI"`
+	// Type specifies the type of the repoCreds. Can be either "git" or "helm. "git" is assumed if empty or absent.
+	Type string `json:"type,omitempty" protobuf:"bytes,12,opt,name=type"`
 }
 
 // Repository is a repository holding application configurations
@@ -1558,6 +1562,8 @@ type Repository struct {
 	GithubAppInstallationId int64 `json:"githubAppInstallationID,omitempty" protobuf:"bytes,17,opt,name=githubAppInstallationID"`
 	// GithubAppEnterpriseBaseURL specifies the base URL of GitHub Enterprise installation. If empty will default to https://api.github.com
 	GitHubAppEnterpriseBaseURL string `json:"githubAppEnterpriseBaseUrl,omitempty" protobuf:"bytes,18,opt,name=githubAppEnterpriseBaseUrl"`
+	// Proxy specifies the HTTP/HTTPS proxy used to access the repo
+	Proxy string `json:"proxy,omitempty" protobuf:"bytes,19,opt,name=proxy"`
 }
 
 // IsInsecure returns true if the repository has been configured to skip server verification

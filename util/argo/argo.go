@@ -210,6 +210,8 @@ func ValidateRepo(
 	kustomizeOptions *argoappv1.KustomizeOptions,
 	plugins []*argoappv1.ConfigManagementPlugin,
 	kubectl kube.Kubectl,
+	proj *argoappv1.AppProject,
+	settingsMgr *settings.SettingsManager,
 ) ([]argoappv1.ApplicationCondition, error) {
 	spec := &app.Spec
 	conditions := make([]argoappv1.ApplicationCondition, 0)
@@ -247,7 +249,25 @@ func ValidateRepo(
 		return conditions, nil
 	}
 
+	helmOptions, err := settingsMgr.GetHelmSettings()
+	if err != nil {
+		return nil, err
+	}
+
 	helmRepos, err := db.ListHelmRepositories(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	permittedHelmRepos, err := GetPermittedRepos(proj, helmRepos)
+	if err != nil {
+		return nil, err
+	}
+	helmRepositoryCredentials, err := db.GetAllHelmRepositoryCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+	permittedHelmCredentials, err := GetPermittedReposCredentials(proj, helmRepositoryCredentials)
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +278,9 @@ func ValidateRepo(
 		Source:           &spec.Source,
 		Repos:            helmRepos,
 		KustomizeOptions: kustomizeOptions,
+		// don't use case during application change to make sure to fetch latest git/helm revisions
+		NoRevisionCache: true,
+		HelmOptions:     helmOptions,
 	})
 	if err != nil {
 		conditions = append(conditions, argoappv1.ApplicationCondition{
@@ -287,7 +310,7 @@ func ValidateRepo(
 		return nil, err
 	}
 	conditions = append(conditions, verifyGenerateManifests(
-		ctx, repo, helmRepos, app, repoClient, kustomizeOptions, plugins, cluster.ServerVersion, APIGroupsToVersions(apiGroups))...)
+		ctx, repo, permittedHelmRepos, helmOptions, app, repoClient, kustomizeOptions, plugins, cluster.ServerVersion, APIGroupsToVersions(apiGroups), permittedHelmCredentials)...)
 
 	return conditions, nil
 }
@@ -405,12 +428,14 @@ func verifyGenerateManifests(
 	ctx context.Context,
 	repoRes *argoappv1.Repository,
 	helmRepos argoappv1.Repositories,
+	helmOptions *argoappv1.HelmOptions,
 	app *argoappv1.Application,
 	repoClient apiclient.RepoServerServiceClient,
 	kustomizeOptions *argoappv1.KustomizeOptions,
 	plugins []*argoappv1.ConfigManagementPlugin,
 	kubeVersion string,
 	apiVersions []string,
+	repositoryCredentials []*argoappv1.RepoCreds,
 ) []argoappv1.ApplicationCondition {
 	spec := &app.Spec
 	var conditions []argoappv1.ApplicationCondition
@@ -436,6 +461,9 @@ func verifyGenerateManifests(
 		KustomizeOptions:  kustomizeOptions,
 		KubeVersion:       kubeVersion,
 		ApiVersions:       apiVersions,
+		HelmOptions:       helmOptions,
+		HelmRepoCreds:     repositoryCredentials,
+		NoRevisionCache:   true,
 	}
 	req.Repo.CopyCredentialsFromRepo(repoRes)
 	req.Repo.CopySettingsFrom(repoRes)
@@ -615,4 +643,24 @@ func mergeVirtualProject(proj *argoappv1.AppProject, globalProj *argoappv1.AppPr
 	proj.Spec.Destinations = append(proj.Spec.Destinations, globalProj.Spec.Destinations...)
 
 	return proj
+}
+
+func GetPermittedReposCredentials(proj *argoappv1.AppProject, repoCreds []*argoappv1.RepoCreds) ([]*argoappv1.RepoCreds, error) {
+	var permittedRepoCreds []*argoappv1.RepoCreds
+	for _, v := range repoCreds {
+		if proj.IsSourcePermitted(argoappv1.ApplicationSource{RepoURL: v.URL}) {
+			permittedRepoCreds = append(permittedRepoCreds, v)
+		}
+	}
+	return permittedRepoCreds, nil
+}
+
+func GetPermittedRepos(proj *argoappv1.AppProject, repos []*argoappv1.Repository) ([]*argoappv1.Repository, error) {
+	var permittedRepos []*argoappv1.Repository
+	for _, v := range repos {
+		if proj.IsSourcePermitted(argoappv1.ApplicationSource{RepoURL: v.Repo}) {
+			permittedRepos = append(permittedRepos, v)
+		}
+	}
+	return permittedRepos, nil
 }

@@ -193,6 +193,8 @@ type Repository struct {
 	GithubAppInstallationId int64 `json:"githubAppInstallationID,omitempty"`
 	// Github App Enterprise base url if empty will default to https://api.github.com
 	GithubAppEnterpriseBaseURL string `json:"githubAppEnterpriseBaseUrl,omitempty"`
+	// Proxy specifies the HTTP/HTTPS proxy used to access the repo
+	Proxy string `json:"proxy,omitempty"`
 }
 
 // Credential template for accessing repositories
@@ -217,6 +219,10 @@ type RepositoryCredentials struct {
 	GithubAppInstallationId int64 `json:"githubAppInstallationID,omitempty"`
 	// Github App Enterprise base url if empty will default to https://api.github.com
 	GithubAppEnterpriseBaseURL string `json:"githubAppEnterpriseBaseUrl,omitempty"`
+	// EnableOCI specifies whether helm-oci support should be enabled for this repo
+	EnableOCI bool `json:"enableOCI,omitempty"`
+	// the type of the repositoryCredentials, "git" or "helm", assumed to be "git" if empty or absent
+	Type string `json:"type,omitempty"`
 }
 
 const (
@@ -294,6 +300,8 @@ const (
 	initialPasswordSecretField = "password"
 	// initialPasswordLength defines the length of the generated initial password
 	initialPasswordLength = 16
+	// helmValuesFileSchemesKey is the key to configure the list of supported helm values file schemas
+	helmValuesFileSchemesKey = "helm.valuesFileSchemes"
 )
 
 // SettingsManager holds config info for a new manager with which to access Kubernetes ConfigMaps.
@@ -588,6 +596,25 @@ func (mgr *SettingsManager) GetResourceCompareOptions() (ArgoCDDiffOptions, erro
 	}
 
 	return diffOptions, nil
+}
+
+// GetHelmSettings returns helm settings
+func (mgr *SettingsManager) GetHelmSettings() (*v1alpha1.HelmOptions, error) {
+	argoCDCM, err := mgr.getConfigMap()
+	if err != nil {
+		return nil, err
+	}
+	helmOptions := &v1alpha1.HelmOptions{}
+	if value, ok := argoCDCM.Data[helmValuesFileSchemesKey]; ok {
+		for _, item := range strings.Split(value, ",") {
+			if item := strings.TrimSpace(item); item != "" {
+				helmOptions.ValuesFileSchemes = append(helmOptions.ValuesFileSchemes, item)
+			}
+		}
+	} else {
+		helmOptions.ValuesFileSchemes = []string{"https", "http"}
+	}
+	return helmOptions, nil
 }
 
 // GetKustomizeSettings loads the kustomize settings from argocd-cm ConfigMap

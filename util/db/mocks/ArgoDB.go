@@ -508,3 +508,26 @@ func (_m *ArgoDB) WatchClusters(ctx context.Context, handleAddEvent func(*v1alph
 
 	return r0
 }
+
+// GetAllHelmRepositoryCredentials provides a mock function with given fields: ctx
+func (_m *ArgoDB) GetAllHelmRepositoryCredentials(ctx context.Context) ([]*v1alpha1.RepoCreds, error) {
+	ret := _m.Called(ctx)
+
+	var r0 []*v1alpha1.RepoCreds
+	if rf, ok := ret.Get(0).(func(context.Context) []*v1alpha1.RepoCreds); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*v1alpha1.RepoCreds)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}

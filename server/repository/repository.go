@@ -258,6 +258,9 @@ func (s *Server) ListApps(ctx context.Context, q *repositorypkg.RepoAppsQuery) (
 	return &repositorypkg.RepoAppsResponse{Items: items}, nil
 }
 
+// GetAppDetails shows parameter values to various config tools (e.g. helm/kustomize values)
+// This is used by UI for parameter form fields during app create & edit pages.
+// It is also used when showing history of parameters used in previous syncs in the app history.
 func (s *Server) GetAppDetails(ctx context.Context, q *repositorypkg.RepoAppDetailsQuery) (*apiclient.RepoAppDetailsResponse, error) {
 	if q.Source == nil {
 		return nil, status.Errorf(codes.InvalidArgument, "missing payload in request")
@@ -309,6 +312,10 @@ func (s *Server) GetAppDetails(ctx context.Context, q *repositorypkg.RepoAppDeta
 	if err != nil {
 		return nil, err
 	}
+	helmOptions, err := s.settings.GetHelmSettings()
+	if err != nil {
+		return nil, err
+	}
 	kustomizeSettings, err := s.settings.GetKustomizeSettings()
 	if err != nil {
 		return nil, err
@@ -323,6 +330,7 @@ func (s *Server) GetAppDetails(ctx context.Context, q *repositorypkg.RepoAppDeta
 		Repos:            helmRepos,
 		KustomizeOptions: kustomizeOptions,
 		AppName:          q.AppName,
+		HelmOptions:      helmOptions,
 	})
 }
 

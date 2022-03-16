@@ -116,7 +116,10 @@ const (
 	LabelKeySecretType = "argocd.argoproj.io/secret-type"
 	// LabelValueSecretTypeCluster indicates a secret type of cluster
 	LabelValueSecretTypeCluster = "cluster"
-
+	// LabelValueSecretTypeRepository indicates a secret type of repository
+	LabelValueSecretTypeRepository = "repository"
+	// LabelValueSecretTypeRepoCreds indicates a secret type of repository credentials
+	LabelValueSecretTypeRepoCreds = "repo-creds"
 	// AnnotationCompareOptions is a comma-separated list of options for comparison
 	AnnotationCompareOptions = "argocd.argoproj.io/compare-options"
 

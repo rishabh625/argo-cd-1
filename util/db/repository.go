@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 	"hash/fnv"
-	"strings"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
@@ -39,6 +38,25 @@ const (
 	// The name of the key storing the GitHub App private key in the secret
 	githubAppPrivateKey = "githubAppPrivateKey"
 )
+
+// repositoryBackend defines the API for types that wish to provide interaction with repository storage
+type repositoryBackend interface {
+	CreateRepository(ctx context.Context, r *appsv1.Repository) (*appsv1.Repository, error)
+	GetRepository(ctx context.Context, repoURL string) (*appsv1.Repository, error)
+	ListRepositories(ctx context.Context, repoType *string) ([]*appsv1.Repository, error)
+	UpdateRepository(ctx context.Context, r *appsv1.Repository) (*appsv1.Repository, error)
+	DeleteRepository(ctx context.Context, repoURL string) error
+	RepositoryExists(ctx context.Context, repoURL string) (bool, error)
+
+	CreateRepoCreds(ctx context.Context, r *appsv1.RepoCreds) (*appsv1.RepoCreds, error)
+	GetRepoCreds(ctx context.Context, repoURL string) (*appsv1.RepoCreds, error)
+	ListRepoCreds(ctx context.Context) ([]string, error)
+	UpdateRepoCreds(ctx context.Context, r *appsv1.RepoCreds) (*appsv1.RepoCreds, error)
+	DeleteRepoCreds(ctx context.Context, name string) error
+	RepoCredsExists(ctx context.Context, repoURL string) (bool, error)
+
+	GetAllHelmRepoCreds(ctx context.Context) ([]*appsv1.RepoCreds, error)
+}
 
 func (db *db) CreateRepository(ctx context.Context, r *appsv1.Repository) (*appsv1.Repository, error) {
 	repos, err := db.settingsMgr.GetRepositories()
@@ -527,20 +545,20 @@ func getRepositoryIndex(repos []settings.Repository, repoURL string) int {
 
 // getRepositoryCredentialIndex returns the index of the best matching repository credential
 // configuration, i.e. the one with the longest match
-func getRepositoryCredentialIndex(repoCredentials []settings.RepositoryCredentials, repoURL string) int {
-	var max, idx int = 0, -1
-	repoURL = git.NormalizeGitURL(repoURL)
-	for i, cred := range repoCredentials {
-		credUrl := git.NormalizeGitURL(cred.URL)
-		if strings.HasPrefix(repoURL, credUrl) {
-			if len(credUrl) > max {
-				max = len(credUrl)
-				idx = i
-			}
-		}
-	}
-	return idx
-}
+// func getRepositoryCredentialIndex(repoCredentials []settings.RepositoryCredentials, repoURL string) int {
+// 	var max, idx int = 0, -1
+// 	repoURL = git.NormalizeGitURL(repoURL)
+// 	for i, cred := range repoCredentials {
+// 		credUrl := git.NormalizeGitURL(cred.URL)
+// 		if strings.HasPrefix(repoURL, credUrl) {
+// 			if len(credUrl) > max {
+// 				max = len(credUrl)
+// 				idx = i
+// 			}
+// 		}
+// 	}
+// 	return idx
+// }
 
 // RepoURLToSecretName hashes repo URL to a secret name using a formula. This is used when
 // repositories are _imperatively_ created and need its credentials to be stored in a secret.
@@ -550,4 +568,30 @@ func RepoURLToSecretName(prefix string, repo string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(repo))
 	return fmt.Sprintf("%s-%v", prefix, h.Sum32())
+}
+
+// GetAllHelmRepositoryCredentials retrieves all repository credentials
+func (db *db) GetAllHelmRepositoryCredentials(ctx context.Context) ([]*appsv1.RepoCreds, error) {
+	// TODO It would be nice to check for duplicates between secret and legacy repositories and make it so that
+	// 	repositories from secrets overlay repositories from legacys.
+
+	secretRepoCreds, err := db.repoBackend().GetAllHelmRepoCreds(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	legacyRepoCreds, err := db.legacyRepoBackend().GetAllHelmRepoCreds(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(secretRepoCreds, legacyRepoCreds...), nil
+}
+
+func (db *db) repoBackend() repositoryBackend {
+	return &secretsRepositoryBackend{db: db}
+}
+
+func (db *db) legacyRepoBackend() repositoryBackend {
+	return &legacyRepositoryBackend{db: db}
 }

@@ -235,6 +235,13 @@ func TestValidateRepo(t *testing.T) {
 			},
 		},
 	}
+
+	proj := &argoappv1.AppProject{
+		Spec: argoappv1.AppProjectSpec{
+			SourceRepos: []string{"*"},
+		},
+	}
+
 	helmRepos := []*argoappv1.Repository{{Repo: "sample helm repo"}}
 
 	repoClient := &mocks.RepoServerServiceClient{}
@@ -243,7 +250,16 @@ func TestValidateRepo(t *testing.T) {
 		Source:           &app.Spec.Source,
 		Repos:            helmRepos,
 		KustomizeOptions: kustomizeOptions,
+		HelmOptions:      &argoappv1.HelmOptions{ValuesFileSchemes: []string{"https", "http"}},
+		NoRevisionCache:  true,
 	}).Return(&apiclient.RepoAppDetailsResponse{}, nil)
+
+	repo.Type = "git"
+	repoClient.On("TestRepository", context.Background(), &apiclient.TestRepositoryRequest{
+		Repo: repo,
+	}).Return(&apiclient.TestRepositoryResponse{
+		VerifiedRepository: true,
+	}, nil)
 
 	repoClientSet := &mocks.Clientset{RepoServerServiceClient: repoClient}
 
@@ -252,6 +268,7 @@ func TestValidateRepo(t *testing.T) {
 	db.On("GetRepository", context.Background(), app.Spec.Source.RepoURL).Return(repo, nil)
 	db.On("ListHelmRepositories", context.Background()).Return(helmRepos, nil)
 	db.On("GetCluster", context.Background(), app.Spec.Destination.Server).Return(cluster, nil)
+	db.On("GetAllHelmRepositoryCredentials", context.Background()).Return(nil, nil)
 
 	var receivedRequest *apiclient.ManifestRequest
 
@@ -260,7 +277,33 @@ func TestValidateRepo(t *testing.T) {
 		return true
 	})).Return(nil, nil)
 
-	conditions, err := ValidateRepo(context.Background(), app, repoClientSet, db, kustomizeOptions, nil, &kubetest.MockKubectlCmd{Version: kubeVersion, APIGroups: apiGroups})
+	cm := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "argocd-cm",
+			Namespace: test.FakeArgoCDNamespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/part-of": "argocd",
+			},
+		},
+		Data: map[string]string{
+			"globalProjects": `
+ - projectName: default-x
+   labelSelector:
+     matchExpressions:
+      - key: is-x
+        operator: Exists
+ - projectName: default-non-x
+   labelSelector:
+     matchExpressions:
+      - key: is-x
+        operator: DoesNotExist
+`,
+		},
+	}
+	kubeClient := fake.NewSimpleClientset(&cm)
+	settingsMgr := settings.NewSettingsManager(context.Background(), kubeClient, test.FakeArgoCDNamespace)
+
+	conditions, err := ValidateRepo(context.Background(), app, repoClientSet, db, kustomizeOptions, nil, &kubetest.MockKubectlCmd{Version: kubeVersion, APIGroups: apiGroups}, proj, settingsMgr)
 
 	assert.NoError(t, err)
 	assert.Empty(t, conditions)

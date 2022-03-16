@@ -306,14 +306,10 @@ func (c *Cmd) template(chartPath string, opts *TemplateOpts) (string, error) {
 		args = append(args, "--set-string", key+"="+cleanSetParameters(val))
 	}
 	for key, val := range opts.SetFile {
-		for _, v := range val {
-			args = append(args, "--set-file", key+"="+cleanSetParameters(string(v)))
-		}
+		args = append(args, "--set-file", key+"="+cleanSetParameters(string(val)))
 	}
 	for _, val := range opts.Values {
-		for _, v := range val {
-			args = append(args, "--values", string(v))
-		}
+		args = append(args, "--values", string(val))
 	}
 	for _, v := range opts.APIVersions {
 		args = append(args, "--api-versions", v)
