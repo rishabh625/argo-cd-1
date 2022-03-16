@@ -2475,6 +2475,11 @@ func (d AppProjectSpec) DestinationClusters() []string {
 	return servers
 }
 
+// HelmOptions holds helm options
+type HelmOptions struct {
+	ValuesFileSchemes []string `protobuf:"bytes,1,opt,name=valuesFileSchemes"`
+}
+
 // ProjectRole represents a role that has access to a project
 type ProjectRole struct {
 	// Name is a name for this role
