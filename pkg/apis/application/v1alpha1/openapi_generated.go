@@ -1991,6 +1991,33 @@ func schema_pkg_apis_application_v1alpha1_HealthStatus(ref common.ReferenceCallb
 	}
 }
 
+func schema_pkg_apis_application_v1alpha1_HelmFileParameter(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "HelmFileParameter is a file parameter that's passed to helm template during manifest generation",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"name": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Name is the name of the Helm parameter",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"path": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Path is the path to the file containing the values for the Helm parameter",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_application_v1alpha1_HelmOptions(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -2014,34 +2041,6 @@ func schema_pkg_apis_application_v1alpha1_HelmOptions(ref common.ReferenceCallba
 					},
 				},
 				Required: []string{"ValuesFileSchemes"},
-			},
-		},
-	}
-}
-
-
-func schema_pkg_apis_application_v1alpha1_HelmFileParameter(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "HelmFileParameter is a file parameter that's passed to helm template during manifest generation",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"name": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Name is the name of the Helm parameter",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"path": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Path is the path to the file containing the values for the Helm parameter",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-				},
 			},
 		},
 	}
@@ -2781,6 +2780,20 @@ func schema_pkg_apis_application_v1alpha1_RepoCreds(ref common.ReferenceCallback
 							Format:      "",
 						},
 					},
+					"enableOCI": {
+						SchemaProps: spec.SchemaProps{
+							Description: "EnableOCI specifies whether helm-oci support should be enabled for this repo",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"type": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Type specifies the type of the repoCreds. Can be either \"git\" or \"helm. \"git\" is assumed if empty or absent.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"url"},
 			},
@@ -2953,6 +2966,13 @@ func schema_pkg_apis_application_v1alpha1_Repository(ref common.ReferenceCallbac
 					"githubAppEnterpriseBaseUrl": {
 						SchemaProps: spec.SchemaProps{
 							Description: "GithubAppEnterpriseBaseURL specifies the base URL of GitHub Enterprise installation. If empty will default to https://api.github.com",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"proxy": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Proxy specifies the HTTP/HTTPS proxy used to access the repo",
 							Type:        []string{"string"},
 							Format:      "",
 						},

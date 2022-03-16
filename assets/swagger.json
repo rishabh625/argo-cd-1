@@ -3845,6 +3845,56 @@
         }
       }
     },
+    "repositoryKsonnetAppSpec": {
+      "type": "object",
+      "title": "KsonnetAppSpec contains Ksonnet app response\nThis roughly reflects: ksonnet/ksonnet/metadata/app/schema.go",
+      "properties": {
+        "environments": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/repositoryKsonnetEnvironment"
+          }
+        },
+        "name": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v1alpha1KsonnetParameter"
+          }
+        }
+      }
+    },
+    "repositoryKsonnetEnvironment": {
+      "type": "object",
+      "properties": {
+        "destination": {
+          "$ref": "#/definitions/repositoryKsonnetEnvironmentDestination"
+        },
+        "k8sVersion": {
+          "description": "KubernetesVersion is the kubernetes version the targeted cluster is running on.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name is the user defined name of an environment"
+        }
+      }
+    },
+    "repositoryKsonnetEnvironmentDestination": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "title": "Namespace is the namespace of the Kubernetes server that targets should be deployed to"
+        },
+        "server": {
+          "description": "Server is the Kubernetes server that the cluster is running on.",
+          "type": "string"
+        }
+      }
+    },
     "repositoryKustomizeAppSpec": {
       "type": "object",
       "title": "KustomizeAppSpec contains kustomize images",
@@ -3928,6 +3978,9 @@
         },
         "helm": {
           "$ref": "#/definitions/repositoryHelmAppSpec"
+        },
+        "ksonnet": {
+          "$ref": "#/definitions/repositoryKsonnetAppSpec"
         },
         "kustomize": {
           "$ref": "#/definitions/repositoryKustomizeAppSpec"
@@ -5655,6 +5708,10 @@
       "type": "object",
       "title": "RepoCreds holds the definition for repository credentials",
       "properties": {
+        "enableOCI": {
+          "type": "boolean",
+          "title": "EnableOCI specifies whether helm-oci support should be enabled for this repo"
+        },
         "githubAppEnterpriseBaseUrl": {
           "type": "string",
           "title": "GithubAppEnterpriseBaseURL specifies the GitHub API URL for GitHub app authentication. If empty will default to https://api.github.com"
@@ -5688,6 +5745,10 @@
         "tlsClientCertKey": {
           "type": "string",
           "title": "TLSClientCertKey specifies the TLS client cert key for authenticating at the repo server"
+        },
+        "type": {
+          "description": "Type specifies the type of the repoCreds. Can be either \"git\" or \"helm. \"git\" is assumed if empty or absent.",
+          "type": "string"
         },
         "url": {
           "type": "string",
@@ -5766,6 +5827,10 @@
         "password": {
           "type": "string",
           "title": "Password contains the password or PAT used for authenticating at the remote repository"
+        },
+        "proxy": {
+          "type": "string",
+          "title": "Proxy specifies the HTTP/HTTPS proxy used to access the repo"
         },
         "repo": {
           "type": "string",
