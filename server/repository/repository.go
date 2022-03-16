@@ -473,6 +473,7 @@ func (s *Server) ValidateAccess(ctx context.Context, q *repositorypkg.RepoAccess
 		GithubAppId:                q.GithubAppID,
 		GithubAppInstallationId:    q.GithubAppInstallationID,
 		GitHubAppEnterpriseBaseURL: q.GithubAppEnterpriseBaseUrl,
+		Proxy:			    q.Proxy,
 	}
 
 	var repoCreds *appsv1.RepoCreds
