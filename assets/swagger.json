@@ -2867,6 +2867,12 @@
             "description": "Github App Enterprise base url if empty will default to https://api.github.com.",
             "name": "githubAppEnterpriseBaseUrl",
             "in": "query"
+          },
+          {
+            "type": "string",
+            "description": "HTTP/HTTPS proxy to access the repository.",
+            "name": "proxy",
+            "in": "query"
           }
         ],
         "responses": {
